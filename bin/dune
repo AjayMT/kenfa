@@ -1,0 +1,4 @@
+(executable
+ (public_name kenfa)
+ (name main)
+ (libraries kenfa))
