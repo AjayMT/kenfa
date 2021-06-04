@@ -53,11 +53,13 @@ let parse_regexp re =
           end
        | '|' ->
           begin match nodes with
-          | n :: nodes ->
-             let* (next_nodes, remaining) = aux re nodes expect_paren in
+          | _ :: _ ->
+             let* (next_nodes, remaining) = aux re [] expect_paren in
              begin match next_nodes with
-             | n2 :: nodes ->
-                aux remaining ((Alternation (n, n2)) :: nodes) expect_paren
+             | _ :: _ ->
+                aux remaining
+                  [Alternation (Group (List.rev nodes), Group (List.rev next_nodes))]
+                  expect_paren
              | [] -> Error "unexpected '|'"
              end
           | [] -> Error "unexpected '|'"
