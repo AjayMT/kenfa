@@ -1,6 +1,4 @@
 
-open Base
-
 (** The type of compiled regular expressions. *)
 type dfa
 
