@@ -79,11 +79,7 @@ let nfa_of_regexp_nodes nodes =
     | Atom a ->
        let nfa_node = Match (a, next_id + 1) in
        (next_id + 1, (next_id, nfa_node) :: nfa_nodes)
-    | Group nodes ->
-       let (next_id, nfa_nodes) =
-         List.fold_left nodes ~init:(next_id, nfa_nodes) ~f:aux
-       in
-       (next_id + 1, nfa_nodes)
+    | Group nodes -> List.fold_left nodes ~init:(next_id, nfa_nodes) ~f:aux
     | Alternation (a, b) ->
        let split_node_id = next_id in
        let first_branch_id = next_id + 1 in
@@ -96,14 +92,14 @@ let nfa_of_regexp_nodes nodes =
        let split_node_pair =
          (split_node_id, Split (first_branch_id, second_branch_id))
        in
-       (second_branch_target + 1,
+       (second_branch_target,
         split_node_pair :: continue_node_pair :: nfa_nodes)
     | Once n ->
        let split_node_id = next_id in
        let match_branch_id = next_id + 1 in
        let (match_target, nfa_nodes) = aux (match_branch_id, nfa_nodes) n in
        let split_node_pair = (split_node_id, Split (match_target, match_branch_id)) in
-       (match_target + 1, split_node_pair :: nfa_nodes)
+       (match_target, split_node_pair :: nfa_nodes)
     | Star n ->
        let split_node_id = next_id in
        let match_branch_id = next_id + 1 in
