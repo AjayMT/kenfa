@@ -14,20 +14,6 @@ type regexp_node = Atom of char
                  | Alternation of regexp_node * regexp_node
                  | Group of regexp_node list
 
-(* let rec show_node node = match node with
- *   | Atom a -> String.of_char a
- *   | Plus n | Star n | Once n ->
- *      let substr = show_node n in
- *      let op = match node with
- *        | Plus _ -> "+ " | Star _ -> "* " | _ -> "? "
- *      in
- *      "(" ^ op ^ substr ^ ")"
- *   | Alternation (one, two) ->
- *      let (a, b) = (show_node one, show_node two) in
- *      "(" ^ a ^ " | " ^ b ^ ")"
- *   | Group nodes ->
- *      "(" ^ (String.concat ~sep:" " @@ List.map ~f:show_node nodes) ^ ")" *)
-
 let ( let* ) x f = Result.bind x ~f:f
 let ( let+ ) x f = Result.map ~f:f x
 
@@ -120,14 +106,14 @@ let nfa_of_regexp_nodes nodes =
   let (final_target, nfa_nodes) = List.fold_left nodes ~init:(0, []) ~f:aux in
   (final_target, Accept) :: nfa_nodes
 
-let _dfa_of_nfa nfa =
+let dfa_of_nfa nfa =
   let nfa_arr =
     Array.of_list @@
       List.map ~f:(fun (_, a) -> a) @@
         List.sort ~compare:(fun (a, _) (b, _) -> Int.compare a b) nfa
   in
 
-  let traverse_nfa state =
+  let rec traverse_nfa state =
     let (start_dfa_node, edge_char, dfa_nodes, dfa_edges) = state in
     let rec traverse_nfa_node_until_match n = match (Array.get nfa_arr n) with
       | Continue id -> traverse_nfa_node_until_match id
@@ -137,30 +123,90 @@ let _dfa_of_nfa nfa =
       | Match (_, _) -> [n]
     in
 
-    (*
-      TODO: advance forward by one step using edge_char before applying
-      traverse_nfa_node_until_match
-     *)
-    let next_dfa_node =
-      List.bind start_dfa_node ~f:traverse_nfa_node_until_match
+    let step_forward c n = match (Array.get nfa_arr n) with
+      | Continue id -> [id]
+      | Split (a, b) -> [a; b]
+      | Accept -> []
+      | Match (d, id) -> if Char.equal d c then [id] else []
     in
-    (next_dfa_node, edge_char, dfa_nodes, dfa_edges)
+    let next_dfa_node =
+      List.sort ~compare:Int.compare @@
+        List.bind ~f:traverse_nfa_node_until_match @@
+          match edge_char with
+          | Some c -> List.bind start_dfa_node ~f:(step_forward c)
+          | None -> start_dfa_node
+    in
+    (* TODO: don't add duplicate edges *)
+    let new_dfa_edges = match edge_char with
+      | Some c -> (c, start_dfa_node, next_dfa_node) :: dfa_edges
+      | None -> dfa_edges
+    in
+    if List.mem dfa_nodes next_dfa_node ~equal:(List.equal (=)) then
+      (start_dfa_node, edge_char, dfa_nodes, new_dfa_edges)
+    else begin
+        let explore_match state n = match (Array.get nfa_arr n) with
+          | Match (c, _) ->
+             let (start_dfa_node, _, dfa_nodes, dfa_edges) = state in
+             let (_, _, dfa_nodes, dfa_edges) =
+               traverse_nfa (start_dfa_node, Some c, dfa_nodes, dfa_edges)
+             in
+             (start_dfa_node, None, dfa_nodes, dfa_edges)
+          | _ -> state
+        in
+        let new_state =
+          (next_dfa_node, None, next_dfa_node :: dfa_nodes, new_dfa_edges)
+        in
+        List.fold next_dfa_node ~init:new_state ~f:explore_match
+      end
   in
-  let (_, _, dfa_nodes, dfa_edges) = traverse_nfa ([0], None, [[0]], []) in
+  let (_, _, dfa_nodes, dfa_edges) = traverse_nfa ([0], None, [], []) in
   (dfa_nodes, dfa_edges)
 
-let compile_regexp re =
-  let show_nfa_node (id, variant) =
-    let vs = match variant with
-      | Accept -> "A" | Continue i -> "C " ^ (Int.to_string i)
-      | Split (a, b) -> "S " ^ (Int.to_string a) ^ " " ^ (Int.to_string b)
-      | Match (c, i) -> "M " ^ (Char.to_string c) ^ " " ^ (Int.to_string i)
-    in
-    "(" ^ (Int.to_string id) ^ ", " ^ vs ^ ")"
+let simplify_dfa (dfa_nodes, dfa_edges) accept_nfa_node =
+  (* we assume the last element of dfa_nodes is the starting node *)
+  let nodes_with_id =
+    List.zip_exn (List.range 0 (List.length dfa_nodes)) (List.rev dfa_nodes)
   in
+  let id_edge (c, a, b) =
+    let (a_id, _) =
+      List.find_exn nodes_with_id ~f:(fun (_, ids) -> List.equal (=) a ids)
+    in
+    let (b_id, _) =
+      List.find_exn nodes_with_id ~f:(fun (_, ids) -> List.equal (=) b ids)
+    in
+    (c, a_id, b_id)
+  in
+  let edges_with_id = List.map dfa_edges ~f:id_edge in
+  let find_edges (id, _) =
+    let add_edge edges (c, a, b) =
+      if a = id then
+        match Map.add edges ~key:c ~data:b with
+        | `Ok m -> m
+        | _ -> edges
+      else edges
+    in
+    let edges =
+      List.fold ~init:(Map.empty (module Char)) ~f:add_edge edges_with_id
+    in
+    (id, edges)
+  in
+  let edge_maps = List.map nodes_with_id ~f:find_edges in
+  let fsm =
+    Array.of_list @@ List.map ~f:(fun (_, a) -> a) @@
+      List.sort ~compare:(fun (a, _) (b, _) -> Int.compare a b) edge_maps
+  in
+  let add_accepted accepted (id, nfa_nodes) =
+    if List.mem nfa_nodes accept_nfa_node ~equal:(=) then id :: accepted
+    else accepted
+  in
+  let accepted = List.fold_left nodes_with_id ~init:[] ~f:add_accepted in
+  (fsm, accepted)
+
+let compile_regexp re =
   let+ regexp_nodes = parse_regexp (String.to_list re) in
   let nfa_nodes = nfa_of_regexp_nodes regexp_nodes in
-  String.concat ~sep:" " @@ List.map nfa_nodes ~f:show_nfa_node
+  let accept_nfa_node = (List.length nfa_nodes) - 1 in
+  simplify_dfa (dfa_of_nfa nfa_nodes) accept_nfa_node
 
 let string_match fsm s =
   let (graph, accepted) = fsm in
