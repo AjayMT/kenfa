@@ -115,12 +115,16 @@ let dfa_of_nfa nfa =
 
   let rec traverse_nfa state =
     let (start_dfa_node, edge_char, dfa_nodes, dfa_edges) = state in
-    let rec traverse_nfa_node_until_match n = match (Array.get nfa_arr n) with
-      | Continue id -> traverse_nfa_node_until_match id
-      | Split (a, b) -> (traverse_nfa_node_until_match a)
-                        @ (traverse_nfa_node_until_match b)
-      | Accept -> [n]
-      | Match (_, _) -> [n]
+    let rec traverse_nfa_node_until_match visited n =
+      if Set.mem visited n then []
+      else
+        let visited = Set.add visited n in
+        match (Array.get nfa_arr n) with
+        | Continue id -> traverse_nfa_node_until_match visited id
+        | Split (a, b) -> (traverse_nfa_node_until_match visited a)
+                          @ (traverse_nfa_node_until_match visited b)
+        | Accept -> [n]
+        | Match (_, _) -> [n]
     in
 
     let step_forward c n = match (Array.get nfa_arr n) with
@@ -131,7 +135,7 @@ let dfa_of_nfa nfa =
     in
     let next_dfa_node =
       List.sort ~compare:Int.compare @@
-        List.bind ~f:traverse_nfa_node_until_match @@
+        List.bind ~f:(traverse_nfa_node_until_match (Set.empty (module Int))) @@
           match edge_char with
           | Some c -> List.bind start_dfa_node ~f:(step_forward c)
           | None -> start_dfa_node
