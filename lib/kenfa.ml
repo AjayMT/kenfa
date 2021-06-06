@@ -220,3 +220,24 @@ let string_match fsm s =
   match final_state with
   | Ok final_state -> List.mem accepted final_state ~equal:(=)
   | Error () -> false
+
+let draw_dfa (fsm, accepted) =
+  let add_edges id edges m =
+    let add_edge_map ~key:k ~data:v edges =
+      let s =
+        (Int.to_string id) ^ " -> " ^ (Int.to_string v) ^ " [ "
+        ^ "label=\"" ^ (Char.to_string k) ^ "\" ];"
+      in
+      s :: edges
+    in
+    Map.fold m ~init:edges ~f:add_edge_map
+  in
+  let edges = Array.foldi fsm ~init:[] ~f:add_edges in
+  let add_accept id accepted_nodes _ =
+    if List.mem accepted id ~equal:(=) then
+      ((Int.to_string id) ^ " [ peripheries=2 ];") :: accepted_nodes
+    else accepted_nodes
+  in
+  let accepted_nodes = Array.foldi fsm ~init:[] ~f:add_accept in
+  "digraph DFA {\n" ^ (String.concat ~sep:"\n" edges) ^ "\n" ^
+    (String.concat ~sep:"\n" accepted_nodes) ^ "\n}"

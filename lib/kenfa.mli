@@ -7,3 +7,6 @@ val compile_regexp : string -> (dfa, string) result
 
 (** [string_match d s] checks whether the string [s] matches the DFA [d] exactly. *)
 val string_match : dfa -> string -> bool
+
+(** [draw_dfa d] outputs a DOT diagram that represents [d] *)
+val draw_dfa : dfa -> string
