@@ -120,6 +120,35 @@ let nfa_of_regexp_nodes nodes =
   let (final_target, nfa_nodes) = List.fold_left nodes ~init:(0, []) ~f:aux in
   (final_target, Accept) :: nfa_nodes
 
+let _dfa_of_nfa nfa =
+  let nfa_arr =
+    Array.of_list @@
+      List.map ~f:(fun (_, a) -> a) @@
+        List.sort ~compare:(fun (a, _) (b, _) -> Int.compare a b) nfa
+  in
+
+  let traverse_nfa state =
+    let (start_dfa_node, edge_char, dfa_nodes, dfa_edges) = state in
+    let rec traverse_nfa_node_until_match n = match (Array.get nfa_arr n) with
+      | Continue id -> traverse_nfa_node_until_match id
+      | Split (a, b) -> (traverse_nfa_node_until_match a)
+                        @ (traverse_nfa_node_until_match b)
+      | Accept -> [n]
+      | Match (_, _) -> [n]
+    in
+
+    (*
+      TODO: advance forward by one step using edge_char before applying
+      traverse_nfa_node_until_match
+     *)
+    let next_dfa_node =
+      List.bind start_dfa_node ~f:traverse_nfa_node_until_match
+    in
+    (next_dfa_node, edge_char, dfa_nodes, dfa_edges)
+  in
+  let (_, _, dfa_nodes, dfa_edges) = traverse_nfa ([0], None, [[0]], []) in
+  (dfa_nodes, dfa_edges)
+
 let compile_regexp re =
   let show_nfa_node (id, variant) =
     let vs = match variant with
