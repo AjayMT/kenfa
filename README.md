@@ -7,7 +7,7 @@ Kenfa currently supports the following operators:
 - `+`: one or more matched strings (ex: `a+` matches `"a", "aa", "aaa", ...`)
 - `?`: zero or one matched strings (ex: `a?` matches `"", "a"`)
 - `|`: alternation / union; this operator has lower precedence than concatenation (ex: `ab|cd` matches `"ab", "cd"`)
-- `()`: grouping (ex: "a(b|c)d" matches `"abd", "acd"`)
+- `()`: grouping (ex: `"a(b|c)d"` matches `"abd", "acd"`)
 
 Operators can be escaped with a backslash: `\*` matches a literal `*` character.
 
@@ -49,4 +49,5 @@ digraph DFA {
 ```
 
 Compiling the DOT diagram with `dot -Tsvg -O` produces the following SVG:
+
 ![](https://github.com/AjayMT/kenfa/blob/master/example.svg?raw=true)
