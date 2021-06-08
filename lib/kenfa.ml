@@ -18,15 +18,16 @@ let ( let* ) x f = Result.bind x ~f:f
 let ( let+ ) x f = Result.map ~f:f x
 
 let parse_regexp re =
-  let rec aux re nodes expect_paren = match re with
-    | [] -> Ok (nodes, [])
-    | ')' :: re -> if expect_paren then Ok (nodes, re) else Error "unexpected ')'"
-    | '(' :: re ->
-       let* (child_nodes, remaining) = aux re [] true in
-       aux remaining ((Group (List.rev child_nodes)) :: nodes) expect_paren
-    | a :: re ->
-       match a with
-       | '+' | '*' | '?' ->
+  let rec aux re nodes expect_paren escaped = match (re, escaped) with
+    | ([], _) -> Ok (nodes, [])
+    | (')' :: re, false) ->
+       if expect_paren then Ok (nodes, re) else Error "unexpected ')'"
+    | ('(' :: re, false) ->
+       let* (child_nodes, remaining) = aux re [] true false in
+       aux remaining ((Group (List.rev child_nodes)) :: nodes) expect_paren false
+    | (a :: re, _) ->
+       match (a, escaped) with
+       | ('+', false) | ('*', false) | ('?', false) ->
           begin match nodes with
           | n :: nodes ->
              let node = match a with
@@ -34,25 +35,26 @@ let parse_regexp re =
                | '*' -> Star n
                | _ -> Once n
              in
-             aux re (node :: nodes) expect_paren
+             aux re (node :: nodes) expect_paren false
           | [] -> Error ("unexpected " ^ (String.of_char a))
           end
-       | '|' ->
+       | ('|', false) ->
           begin match nodes with
           | _ :: _ ->
-             let* (next_nodes, remaining) = aux re [] expect_paren in
+             let* (next_nodes, remaining) = aux re [] expect_paren false in
              begin match next_nodes with
              | _ :: _ ->
                 aux remaining
                   [Alternation (Group (List.rev nodes), Group (List.rev next_nodes))]
-                  expect_paren
+                  expect_paren false
              | [] -> Error "unexpected '|'"
              end
           | [] -> Error "unexpected '|'"
           end
-       | a -> aux re ((Atom a) :: nodes) expect_paren
+       | ('\\', false) -> aux re nodes expect_paren true
+       | (a, _) -> aux re ((Atom a) :: nodes) expect_paren false
   in
-  let+ (nodes, _) = aux re [] false in
+  let+ (nodes, _) = aux re [] false false in
   List.rev nodes
 
 type nfa_node = Accept

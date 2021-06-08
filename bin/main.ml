@@ -19,7 +19,8 @@ let () =
      | Error e -> Stdlib.prerr_endline e
      | Ok dfa ->
         if !draw_flag then Stdlib.print_endline @@ draw_dfa dfa else ();
-        match rest with
-        | input :: _ -> Stdlib.print_endline @@ Bool.to_string @@
-                          string_match dfa input
-        | [] -> Caml.Arg.usage options usage_msg
+        match (rest, !draw_flag) with
+        | (input :: _, _) -> Stdlib.print_endline @@ Bool.to_string @@
+                               string_match dfa input
+        | ([], false) -> Caml.Arg.usage options usage_msg
+        | _ -> ()
